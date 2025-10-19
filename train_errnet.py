@@ -29,16 +29,18 @@ if opt.debug:
 datadir = '/scratch/$USER/datasets/'
 
 datadir_syn = join(datadir, 'blended')
-datadir_real = join(datadir, 'transmission_layer')
+# datadir_real = join(datadir, 'transmission_layer')
 
 train_dataset = datasets.CEILDataset(
     datadir_syn, read_fns('VOC2012_224_train_png.txt'), size=opt.max_dataset_size, enable_transforms=True, 
     low_sigma=opt.low_sigma, high_sigma=opt.high_sigma,
     low_gamma=opt.low_gamma, high_gamma=opt.high_gamma)
 
-train_dataset_real = datasets.CEILTestDataset(datadir_real, enable_transforms=True)
+# train_dataset_real = datasets.CEILTestDataset(datadir_real, enable_transforms=True)
 
-train_dataset_fusion = datasets.FusionDataset([train_dataset, train_dataset_real], [0.7, 0.3])
+# train_dataset_fusion = datasets.FusionDataset([train_dataset, train_dataset_real], [0.7, 0.3])
+
+train_dataset_fusion = train_dataset
 
 train_dataloader_fusion = datasets.DataLoader(
     train_dataset_fusion, batch_size=opt.batchSize, shuffle=not opt.serial_batches, 
