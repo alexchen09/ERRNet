@@ -26,10 +26,10 @@ if opt.debug:
     opt.no_flip = True
 
 # modify the following code to 
-datadir = '/media/kaixuan/DATA/Papers/Code/Data/Reflection/'
+datadir = '.datasets/train/'
 
-datadir_syn = join(datadir, 'VOCdevkit/VOC2012/PNGImages')
-datadir_real = join(datadir, 'real_train')
+datadir_syn = join(datadir, 'syn')
+datadir_real = join(datadir, 'real')
 
 train_dataset = datasets.CEILDataset(
     datadir_syn, read_fns('VOC2012_224_train_png.txt'), size=opt.max_dataset_size, enable_transforms=True, 
