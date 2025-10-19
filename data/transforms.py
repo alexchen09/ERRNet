@@ -2,7 +2,13 @@ from __future__ import division
 import torch
 import math
 import random
-from PIL import Image, ImageOps, ImageEnhance, PILLOW_VERSION
+# from PIL import Image, ImageOps, ImageEnhance, PILLOW_VERSION
+from PIL import Image, ImageOps, ImageEnhance
+try:
+    from PIL import PILLOW_VERSION
+except ImportError:
+    # Pillow >= 10.0 use __version__
+    from PIL import __version__ as PILLOW_VERSION
 try:
     import accimage
 except ImportError:
