@@ -26,10 +26,10 @@ if opt.debug:
     opt.no_flip = True
 
 # modify the following code to 
-datadir = '.datasets/train/'
+datadir = '/scratch/$USER/datasets/'
 
-datadir_syn = join(datadir, 'syn')
-datadir_real = join(datadir, 'real')
+datadir_syn = join(datadir, 'blended')
+datadir_real = join(datadir, 'transmission_layer')
 
 train_dataset = datasets.CEILDataset(
     datadir_syn, read_fns('VOC2012_224_train_png.txt'), size=opt.max_dataset_size, enable_transforms=True, 
