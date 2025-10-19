@@ -28,7 +28,7 @@ if opt.debug:
 # modify the following code to 
 datadir = '/scratch/$USER/datasets/'
 
-datadir_syn = join(datadir, 'blended')
+datadir_syn = join(datadir, 'transmission_layer')
 # datadir_real = join(datadir, 'transmission_layer')
 
 train_dataset = datasets.CEILDataset(
