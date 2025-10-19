@@ -51,7 +51,6 @@ class FeaturePyramidNetwork(nn.Module):
         lateral_feats = []
         for i, feat in enumerate(pyramid_levels):
             lateral_feat = self.lateral_convs[i](feat)
-            lateral_feat = self.lateral_norms[i](lateral_feat)
             lateral_feats.append(lateral_feat)
         
         # Top-down pathway with lateral connections
@@ -72,7 +71,6 @@ class FeaturePyramidNetwork(nn.Module):
             
             # Apply 3x3 conv for refinement
             top_down_feat = self.top_down_convs[i](top_down_feat)
-            top_down_feat = self.top_down_norms[i](top_down_feat)
             top_down_feat = self.relu(top_down_feat)
             
             top_down_feats.insert(0, top_down_feat)  # Insert at beginning to maintain order
@@ -83,7 +81,6 @@ class FeaturePyramidNetwork(nn.Module):
         
         # Final fusion
         output_feat = self.fusion_conv(output_feat)
-        output_feat = self.fusion_norm(output_feat)
         output_feat = self.relu(output_feat)
         
         return output_feat
@@ -173,7 +170,7 @@ class SELayer(nn.Module):
      
 
 class DRNet(torch.nn.Module):
-    def __init__(self, in_channels, out_channels, n_feats, n_resblocks, norm=nn.BatchNorm2d, 
+    def __init__(self, in_channels, out_channels, n_feats, n_resblocks, norm=None, 
     se_reduction=None, res_scale=1, bottom_kernel_size=3, pyramid=False, use_fpn=True, use_eca=True):
         super(DRNet, self).__init__()
         # Initial convolution layers
@@ -237,7 +234,7 @@ class ConvLayer(torch.nn.Sequential):
 
 
 class ResidualBlock(torch.nn.Module):
-    def __init__(self, channels, dilation=1, norm=nn.BatchNorm2d, act=nn.ReLU(True), se_reduction=None, res_scale=1, use_eca=True):
+    def __init__(self, channels, dilation=1, norm=None, act=nn.ReLU(True), se_reduction=None, res_scale=1, use_eca=True):
         super(ResidualBlock, self).__init__()
         conv = nn.Conv2d
         self.conv1 = ConvLayer(conv, channels, channels, kernel_size=3, stride=1, dilation=dilation, norm=norm, act=act)
