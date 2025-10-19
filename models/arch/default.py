@@ -2,6 +2,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+import math
 
 
 class FeaturePyramidNetwork(nn.Module):
@@ -122,7 +123,46 @@ class PyramidPooling(nn.Module):
         return self.relu(self.bottleneck(priors))
 
 
+class ECALayer(nn.Module):
+    """
+    Efficient Channel Attention (ECA-Net) implementation.
+    More efficient than SE-Net by using 1D convolution instead of FC layers
+    and adaptively determining the kernel size.
+    """
+    def __init__(self, channel, k_size=None):
+        super(ECALayer, self).__init__()
+        if k_size is None:
+            # Adaptive kernel size calculation based on channel dimension
+            t = int(abs((math.log(channel, 2) + 1) / 2))
+            k_size = t if t % 2 else t + 1
+        
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.conv = nn.Conv1d(1, 1, kernel_size=k_size, padding=(k_size - 1) // 2, bias=False)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        # Global average pooling
+        b, c, h, w = x.size()
+        y = self.avg_pool(x)  # (b, c, 1, 1)
+        
+        # Remove spatial dimensions and transpose for 1D conv
+        y = y.view(b, 1, c)  # (b, 1, c)
+        
+        # 1D convolution for channel attention
+        y = self.conv(y)  # (b, 1, c)
+        
+        # Apply sigmoid and reshape back
+        y = self.sigmoid(y)  # (b, 1, c)
+        y = y.view(b, c, 1, 1)  # (b, c, 1, 1)
+        
+        return x * y
+
+
 class SELayer(nn.Module):
+    """
+    Legacy Squeeze-and-Excitation layer - kept for backward compatibility.
+    Consider using ECALayer instead for better efficiency.
+    """
     def __init__(self, channel, reduction=16):
         super(SELayer, self).__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
@@ -143,7 +183,7 @@ class SELayer(nn.Module):
 
 class DRNet(torch.nn.Module):
     def __init__(self, in_channels, out_channels, n_feats, n_resblocks, norm=nn.BatchNorm2d, 
-    se_reduction=None, res_scale=1, bottom_kernel_size=3, pyramid=False, use_fpn=True):
+    se_reduction=None, res_scale=1, bottom_kernel_size=3, pyramid=False, use_fpn=True, use_eca=True):
         super(DRNet, self).__init__()
         # Initial convolution layers
         conv = nn.Conv2d
@@ -160,7 +200,7 @@ class DRNet(torch.nn.Module):
 
         self.res_module = nn.Sequential(*[ResidualBlock(
             n_feats, dilation=dilation_config[i], norm=norm, act=act, 
-            se_reduction=se_reduction, res_scale=res_scale) for i in range(n_resblocks)])
+            se_reduction=se_reduction, res_scale=res_scale, use_eca=use_eca) for i in range(n_resblocks)])
 
         # Upsampling Layers
         self.deconv1 = ConvLayer(deconv, n_feats, n_feats, kernel_size=4, stride=2, padding=1, norm=norm, act=act)
@@ -206,22 +246,28 @@ class ConvLayer(torch.nn.Sequential):
 
 
 class ResidualBlock(torch.nn.Module):
-    def __init__(self, channels, dilation=1, norm=nn.BatchNorm2d, act=nn.ReLU(True), se_reduction=None, res_scale=1):
+    def __init__(self, channels, dilation=1, norm=nn.BatchNorm2d, act=nn.ReLU(True), se_reduction=None, res_scale=1, use_eca=True):
         super(ResidualBlock, self).__init__()
         conv = nn.Conv2d
         self.conv1 = ConvLayer(conv, channels, channels, kernel_size=3, stride=1, dilation=dilation, norm=norm, act=act)
         self.conv2 = ConvLayer(conv, channels, channels, kernel_size=3, stride=1, dilation=dilation, norm=norm, act=None)
-        self.se_layer = None
+        self.attention_layer = None
         self.res_scale = res_scale
+        
         if se_reduction is not None:
-            self.se_layer = SELayer(channels, se_reduction)
+            if use_eca:
+                # Use ECA-Net (more efficient, no reduction parameter needed)
+                self.attention_layer = ECALayer(channels)
+            else:
+                # Use SE-Net (legacy)
+                self.attention_layer = SELayer(channels, se_reduction)
 
     def forward(self, x):
         residual = x
         out = self.conv1(x)
         out = self.conv2(out)
-        if self.se_layer:
-            out = self.se_layer(out)
+        if self.attention_layer:
+            out = self.attention_layer(out)
         out = out * self.res_scale
         out = out + residual
         return out

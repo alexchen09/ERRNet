@@ -8,4 +8,4 @@ def basenet(in_channels, out_channels, **kwargs):
 
 
 def errnet(in_channels, out_channels, **kwargs):
-    return DRNet(in_channels, out_channels, 256, 13, norm=None, res_scale=0.1, se_reduction=8, bottom_kernel_size=1, pyramid=True, use_fpn=True, **kwargs)
+    return DRNet(in_channels, out_channels, 256, 13, norm=None, res_scale=0.1, se_reduction=8, bottom_kernel_size=1, pyramid=True, use_fpn=True, use_eca=True, **kwargs)
