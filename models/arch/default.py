@@ -26,19 +26,10 @@ class FeaturePyramidNetwork(nn.Module):
             for _ in range(num_levels)
         ])
         
-        # Batch normalization and activation
-        self.lateral_norms = nn.ModuleList([
-            nn.BatchNorm2d(out_channels) for _ in range(num_levels)
-        ])
-        self.top_down_norms = nn.ModuleList([
-            nn.BatchNorm2d(out_channels) for _ in range(num_levels)
-        ])
-        
         self.relu = nn.ReLU(inplace=True)
         
         # Final fusion layer
         self.fusion_conv = nn.Conv2d(out_channels, out_channels, kernel_size=1, bias=False)
-        self.fusion_norm = nn.BatchNorm2d(out_channels)
         
     def forward(self, feats):
         """
