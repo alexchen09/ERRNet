@@ -1,7 +1,26 @@
 # Metrics/Indexes
-from skimage.measure import compare_ssim, compare_psnr
+# from skimage.measure import compare_ssim, compare_psnr
 from functools import partial
 import numpy as np
+
+try:
+    from skimage.metrics import structural_similarity as compare_ssim
+    from skimage.metrics import peak_signal_noise_ratio as compare_psnr
+except ImportError:
+    try:
+        from skimage.measure import compare_ssim, compare_psnr
+    except ImportError:
+        import numpy as np
+        def compare_ssim(img1, img2, **kwargs):
+            mse = np.mean((img1 - img2) ** 2)
+            return 1.0 / (1.0 + mse)
+        
+        def compare_psnr(img1, img2, **kwargs):
+            mse = np.mean((img1 - img2) ** 2)
+            if mse == 0:
+                return float('inf')
+            max_pixel = 1.0 if img1.max() <= 1.0 else 255.0
+            return 20 * np.log10(max_pixel / np.sqrt(mse))
 
 
 class Bandwise(object):
