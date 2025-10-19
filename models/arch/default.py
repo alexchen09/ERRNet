@@ -4,7 +4,104 @@ from torch import nn
 import torch.nn.functional as F
 
 
+class FeaturePyramidNetwork(nn.Module):
+    """
+    Feature Pyramid Network (FPN) implementation.
+    Creates a top-down pathway with lateral connections for multi-scale feature fusion.
+    """
+    def __init__(self, in_channels, out_channels, num_levels=4):
+        super().__init__()
+        self.num_levels = num_levels
+        
+        # Lateral connections (1x1 convs to reduce channel dimensions)
+        self.lateral_convs = nn.ModuleList([
+            nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
+            for _ in range(num_levels)
+        ])
+        
+        # Top-down pathway (3x3 convs for feature refinement)
+        self.top_down_convs = nn.ModuleList([
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False)
+            for _ in range(num_levels)
+        ])
+        
+        # Batch normalization and activation
+        self.lateral_norms = nn.ModuleList([
+            nn.BatchNorm2d(out_channels) for _ in range(num_levels)
+        ])
+        self.top_down_norms = nn.ModuleList([
+            nn.BatchNorm2d(out_channels) for _ in range(num_levels)
+        ])
+        
+        self.relu = nn.ReLU(inplace=True)
+        
+        # Final fusion layer
+        self.fusion_conv = nn.Conv2d(out_channels, out_channels, kernel_size=1, bias=False)
+        self.fusion_norm = nn.BatchNorm2d(out_channels)
+        
+    def forward(self, feats):
+        """
+        Args:
+            feats: Input feature map of shape (B, C, H, W)
+        Returns:
+            Enhanced feature map with multi-scale information
+        """
+        # Create pyramid levels by downsampling
+        pyramid_levels = []
+        current_feat = feats
+        
+        for i in range(self.num_levels):
+            pyramid_levels.append(current_feat)
+            if i < self.num_levels - 1:  # Don't downsample the last level
+                current_feat = F.avg_pool2d(current_feat, kernel_size=2, stride=2)
+        
+        # Apply lateral connections
+        lateral_feats = []
+        for i, feat in enumerate(pyramid_levels):
+            lateral_feat = self.lateral_convs[i](feat)
+            lateral_feat = self.lateral_norms[i](lateral_feat)
+            lateral_feats.append(lateral_feat)
+        
+        # Top-down pathway with lateral connections
+        top_down_feats = []
+        prev_feat = None
+        
+        for i in reversed(range(self.num_levels)):
+            lateral_feat = lateral_feats[i]
+            
+            if prev_feat is not None:
+                # Upsample previous feature to match current level
+                h, w = lateral_feat.size(2), lateral_feat.size(3)
+                prev_feat = F.interpolate(prev_feat, size=(h, w), mode='bilinear', align_corners=False)
+                # Add lateral connection
+                top_down_feat = lateral_feat + prev_feat
+            else:
+                top_down_feat = lateral_feat
+            
+            # Apply 3x3 conv for refinement
+            top_down_feat = self.top_down_convs[i](top_down_feat)
+            top_down_feat = self.top_down_norms[i](top_down_feat)
+            top_down_feat = self.relu(top_down_feat)
+            
+            top_down_feats.insert(0, top_down_feat)  # Insert at beginning to maintain order
+            prev_feat = top_down_feat
+        
+        # Use the finest level (original resolution) as output
+        output_feat = top_down_feats[0]
+        
+        # Final fusion
+        output_feat = self.fusion_conv(output_feat)
+        output_feat = self.fusion_norm(output_feat)
+        output_feat = self.relu(output_feat)
+        
+        return output_feat
+
+
 class PyramidPooling(nn.Module):
+    """
+    Legacy Pyramid Pooling module - kept for backward compatibility.
+    Consider using FeaturePyramidNetwork instead for better performance.
+    """
     def __init__(self, in_channels, out_channels, scales=(4, 8, 16, 32), ct_channels=1):
         super().__init__()
         self.stages = []
@@ -46,7 +143,7 @@ class SELayer(nn.Module):
 
 class DRNet(torch.nn.Module):
     def __init__(self, in_channels, out_channels, n_feats, n_resblocks, norm=nn.BatchNorm2d, 
-    se_reduction=None, res_scale=1, bottom_kernel_size=3, pyramid=False):
+    se_reduction=None, res_scale=1, bottom_kernel_size=3, pyramid=False, use_fpn=True):
         super(DRNet, self).__init__()
         # Initial convolution layers
         conv = nn.Conv2d
@@ -73,7 +170,11 @@ class DRNet(torch.nn.Module):
             self.deconv3 = ConvLayer(conv, n_feats, out_channels, kernel_size=1, stride=1, norm=None, act=act)
         else:
             self.deconv2 = ConvLayer(conv, n_feats, n_feats, kernel_size=3, stride=1, norm=norm, act=act)
-            self.pyramid_module = PyramidPooling(n_feats, n_feats, scales=(4,8,16,32), ct_channels=n_feats//4)
+            # Use FPN by default, fallback to PyramidPooling if use_fpn=False
+            if use_fpn:
+                self.pyramid_module = FeaturePyramidNetwork(n_feats, n_feats, num_levels=4)
+            else:
+                self.pyramid_module = PyramidPooling(n_feats, n_feats, scales=(4,8,16,32), ct_channels=n_feats//4)
             self.deconv3 = ConvLayer(conv, n_feats, out_channels, kernel_size=1, stride=1, norm=None, act=act)
         
     def forward(self, x):
